@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CyberTitans - Dashboard Hala</title>
+    <style>
+        :root {
+            --primary: #00ff88;
+            --bg: #121212;
+            --card-bg: #1e1e1e;
+            --text: #ffffff;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+        }
+
+        h1 {
+            color: var(--primary);
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            margin-bottom: 30px;
+            font-size: 1.5rem;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            width: 100%;
+            max-width: 500px;
+        }
+
+        .card {
+            background-color: var(--card-bg);
+            padding: 20px;
+            border-radius: 15px;
+            border: 1px solid #333;
+            text-align: center;
+            transition: transform 0.2s;
+        }
+
+        .card:active {
+            transform: scale(0.95);
+        }
+
+        .label {
+            font-size: 0.8rem;
+            color: #888;
+            margin-bottom: 10px;
+            display: block;
+        }
+
+        .value {
+            font-size: 1.8rem;
+            font-weight: bold;
+            color: var(--primary);
+        }
+
+        .unit {
+            font-size: 0.9rem;
+            color: var(--primary);
+            opacity: 0.8;
+        }
+
+        .status {
+            margin-top: 10px;
+            font-size: 0.7rem;
+            padding: 5px 10px;
+            border-radius: 20px;
+            background: #2a2a2a;
+            display: inline-block;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>CyberTitans Monitor</h1>
+
+    <div class="grid">
+        <div class="card">
+            <span class="label">TEMPERATURA</span>
+            <span class="value">{{ date.temp }}</span><span class="unit">�C</span>
+            <div class="status">Senzor Activ</div>
+        </div>
+
+        <div class="card">
+            <span class="label">CALITATE AER</span>
+            <span class="value">{{ date.aer }}</span>
+            <div class="status">Monitorizare</div>
+        </div>
+
+        <div class="card">
+            <span class="label">VENTILATOR</span>
+            <span class="value">{{ date.ventilator }}</span>
+            <div class="status">Sistem Racire</div>
+        </div>
+
+        <div class="card">
+            <span class="label">GEAM (SERVO)</span>
+            <span class="value">�NCHIS</span>
+            <div class="status">Automatizat</div>
+        </div>
+    </div>
+
+    <p style="margin-top: 40px; color: #444; font-size: 0.7rem;">
+        CONNECTED TO RASPBERRY PI IP: 192.168.137.141
+    </p>
+
+</body>
+</html>
