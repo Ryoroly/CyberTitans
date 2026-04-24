@@ -8,10 +8,10 @@ import adafruit_mpu6050
 from gpiozero import DigitalInputDevice, PWMOutputDevice, Servo, LED, Button
 
 # ==========================================
-# SETARI DE CONFIGURARE
+# SETARI DE CONFIGURARE INITIALE
 # ==========================================
 ACTIVARE_SENZOR_GAZ = 0      
-TEMPERATURA_TINTA = 30.0     
+TEMPERATURA_TINTA_INITIALA = 26.0     
 TOLERANTA_TEMP = 1.0         
 
 class DigitalTwinHala:
@@ -19,7 +19,8 @@ class DigitalTwinHala:
         print("Initializare Creier Digital Twin...")
 
         # Date Senzori
-        self.temp = TEMPERATURA_TINTA
+        self.temp = TEMPERATURA_TINTA_INITIALA
+        self.temperatura_tinta = TEMPERATURA_TINTA_INITIALA # NOU: Tinta controlabila
         self.umiditate = 50.0
         self.presiune = 1013.25
         self.calitate_aer_slaba = False 
@@ -33,31 +34,29 @@ class DigitalTwinHala:
         self.culoare_led = "ALBASTRU"
         self.alerta_vibratii = False
         
-        # Variabile pentru PWM Fluid (Soft Start / Stop)
+        # PWM Fluid 
         self.target_ventilator = 0.0
         self.putere_curenta_ventilator = 0.0
         
-        # --- VARIABILE PENTRU MODUL MANUAL WEB ---
-        self.mod_auto = True         # Implicit porneste pe Auto
-        self.manual_vent = 0.0       # Turatie manuala
-        self.manual_geam = False     # Stare manuala geam
-        self.manual_inc = False      # Stare manuala incalzire
+        # Mod Manual Web
+        self.mod_auto = True         
+        self.manual_vent = 0.0       
+        self.manual_geam = False     
+        self.manual_inc = False      
         
-        # Variabile pentru Terminal si Buton Fizic
+        # Override Vechi (pentru terminal)
         self.override_temp = None
         self.override_servo = None
         self.override_timp_expirare = 0.0
+        
+        # Buton Fizic
         self.mod_aer_combinat = False
 
         self._init_hardware()
-        
-        # Pornim muncitorul din fundal care face miscarea fluida la ventilator
         threading.Thread(target=self._worker_pwm_fluid, daemon=True).start()
-        
         self._verificare_sisteme()
 
     def _init_hardware(self):
-        # Senzori I2C si DHT
         try: self.dht = adafruit_dht.DHT22(board.D4)
         except: self.dht = None
 
@@ -70,7 +69,6 @@ class DigitalTwinHala:
         try: self.mq135 = DigitalInputDevice(17)
         except: self.mq135 = None
 
-        # Actuatori si LED-uri
         try:
             self.ventilator = PWMOutputDevice(13)
             self.geam_servo = Servo(18, min_pulse_width=0.0005, max_pulse_width=0.0025)
@@ -80,11 +78,9 @@ class DigitalTwinHala:
             self.led_albastru = LED(20) 
             self.led_galben = LED(6)    
             
-            # Initializare Buton Fizic (Kill Switch pe Pin 37)
             self.buton_fizic = Button(26, pull_up=True, bounce_time=0.2)
             self.buton_fizic.when_pressed = self.toggle_buton_fizic
 
-            # Siguranta Servo: Inchide clapa si ii taie curentul sa nu bazaie
             self.geam_servo.max()
             time.sleep(0.5)
             self.geam_servo.value = None 
@@ -96,34 +92,26 @@ class DigitalTwinHala:
             self.led_rosu.off()
             self.led_albastru.on()
             self.led_galben.off()
-            
         except Exception as e:
             print(f"Eroare Hardware: {e}")
 
-    # ==========================================
-    # LOGICA: PWM FLUID IN FUNDAL
-    # ==========================================
     def _worker_pwm_fluid(self):
-        pas_crestere = 0.05   # Accelerare de la 0 la 100 in ~2 sec
-        pas_scadere = 0.015   # Decelerare lina in ~6.6 sec
-
+        pas_crestere = 0.05   
+        pas_scadere = 0.015   
         while True:
             if self.ventilator:
                 if self.putere_curenta_ventilator < self.target_ventilator:
                     self.putere_curenta_ventilator += pas_crestere
                     if self.putere_curenta_ventilator > self.target_ventilator:
                         self.putere_curenta_ventilator = self.target_ventilator
-                        
                 elif self.putere_curenta_ventilator > self.target_ventilator:
                     self.putere_curenta_ventilator -= pas_scadere
                     if self.putere_curenta_ventilator < self.target_ventilator:
                         self.putere_curenta_ventilator = self.target_ventilator
-                
                 try:
                     val_sigura = max(0.0, min(1.0, self.putere_curenta_ventilator))
                     self.ventilator.value = val_sigura
                 except: pass
-                    
             time.sleep(0.1)
 
     def toggle_buton_fizic(self):
@@ -136,14 +124,11 @@ class DigitalTwinHala:
         if self.incalzire_rezistente: self.incalzire_rezistente.on()
         if self.led_rosu: self.led_rosu.on()
         if self.led_galben: self.led_galben.on()
-            
         self.target_ventilator = 0.5
         time.sleep(1.5)
-        
         if self.incalzire_rezistente: self.incalzire_rezistente.off()
         if self.led_rosu: self.led_rosu.off()
         if self.led_galben: self.led_galben.off()
-        
         self.target_ventilator = 0.0
         print("Auto-test finalizat.")
 
@@ -183,10 +168,9 @@ class DigitalTwinHala:
         msg = "Hala in parametri optimi."
         alerta_vibratie = False
         
-        diff = abs(self.temp - TEMPERATURA_TINTA)
-        afiseaza_timp = (diff >= 5.0)
+        diff = abs(self.temp - self.temperatura_tinta)
 
-        # 1. VERIFICARE BUTON FIZIC (Prioritate Maxima)
+        # 1. VERIFICARE BUTON FIZIC
         if self.mod_aer_combinat:
             self.alerta = "MOD AER COMBINAT (Manual Fizic)"
             act_geam = False   
@@ -197,11 +181,11 @@ class DigitalTwinHala:
             
         # 2. MOD MANUAL DIN WEB
         elif not self.mod_auto:
-            self.alerta = "MOD MANUAL (Controlat din Web)"
+            self.alerta = "MOD MANUAL"
             act_geam = self.manual_geam
             act_inc = self.manual_inc
             target_vent_nou = self.manual_vent
-            
+             
             if act_inc: culoare = "ROSU"
             elif target_vent_nou > 0 or act_geam: culoare = "ALBASTRU"
             else: culoare = "GALBEN"
@@ -220,21 +204,19 @@ class DigitalTwinHala:
                 self.alerta = "ALERTA: Aer Viciat!"
                 act_geam = True
                 target_vent_nou = 1.0
-                msg = "Evacuare aer (25s)."
+                msg = "Evacuare aer viciat."
             else:
                 self.alerta = "Niciuna"
-                if self.temp > TEMPERATURA_TINTA + TOLERANTA_TEMP:
+                if self.temp > self.temperatura_tinta + TOLERANTA_TEMP:
                     act_geam = True  
                     target_vent_nou = 1.0
-                    if afiseaza_timp: msg = "Racire intensa (20s)."
-                    else: msg = "Racire usoara."
-                elif self.temp < TEMPERATURA_TINTA - TOLERANTA_TEMP:
+                    msg = "Racire activa."
+                elif self.temp < self.temperatura_tinta - TOLERANTA_TEMP:
                     act_geam = False 
                     act_inc = True
                     target_vent_nou = 1.0
                     culoare = "ROSU"
-                    if afiseaza_timp: msg = "Incalzire intensa (30s)."
-                    else: msg = "Incalzire usoara."
+                    msg = "Incalzire activa."
                 else:
                     act_geam = False 
                     msg = "Temperatura optima atinsa."
@@ -248,15 +230,11 @@ class DigitalTwinHala:
 
             if time.time() < self.override_timp_expirare and self.override_servo is not None:
                 act_geam = self.override_servo
-                msg = f"[MANUAL TTY] {msg}"
 
         # --- EXECUTIE HARDWARE ---
         if self.geam_servo and act_geam != self.geam_deschis:
-            if act_geam: 
-                self.geam_servo.mid() 
-            else: 
-                self.geam_servo.max() 
-            
+            if act_geam: self.geam_servo.mid() 
+            else: self.geam_servo.max() 
             time.sleep(0.5)               
             self.geam_servo.value = None  
             self.geam_deschis = act_geam
@@ -297,10 +275,11 @@ class DigitalTwinHala:
             "vnt": int(self.putere_curenta_ventilator * 100),
             "msg": self.mesaj_predictie, "led": self.culoare_led,
             "alert_vib": self.alerta_vibratii,
-            "auto": self.mod_auto
+            "auto": self.mod_auto,
+            "tinta": self.temperatura_tinta, 
+            "toleranta": TOLERANTA_TEMP
         }
 
-# --- FUNCTIE ASCULTARE COMENZI TERMINAL ---
 def asculta_terminal(twin):
     while True:
         try:
@@ -316,7 +295,6 @@ def asculta_terminal(twin):
                 twin.override_timp_expirare = time.time() + 10.0
         except: pass
 
-# --- FUNCTIA PRINCIPALA DE RULARE ---
 def ruleaza_sistem(twin):
     print("\nSistem Activ. Comenzi TTY: 'temp [val]', 'servo deschis', 'servo inchis'\n")
     try:
@@ -324,16 +302,13 @@ def ruleaza_sistem(twin):
             twin.citeste_senzori()
             twin.proceseaza_logica()
             s = twin.obtine_stare()
-            
             str_led = s['led']
             if s['alert_vib']: str_led += " + GALBEN"
-            
             print(f"[{str_led}] Temp: {s['t']}C | Vib: {s['v']} | Pres: {s['p']}")
             print(f"Vent: {s['vnt']}% | Geam: {'DESCHIS' if s['g'] else 'INCHIS'} | Rezistente: {'DA' if s['inc'] else 'NU'} | Mod: {'AUTO' if s['auto'] else 'MANUAL'}")
             print(f"Status: {s['msg']}")
             print("-" * 65)
             time.sleep(1.5)
-
     except KeyboardInterrupt:
         print("\nInchidere securizata... Oprim hardware-ul in siguranta.")
         if twin.ventilator: twin.ventilator.value = 0
@@ -342,18 +317,15 @@ def ruleaza_sistem(twin):
         if twin.led_albastru: twin.led_albastru.off()
         if twin.led_galben: twin.led_galben.off()
         if twin.geam_servo:
-            print("Inchidere clapa (180 grade)...")
             twin.geam_servo.max() 
             time.sleep(1)
             twin.geam_servo.detach()
         print("Sistem oprit complet.")
 
-# --- RULARE DIRECTA ---
 if __name__ == "__main__":
     twin = DigitalTwinHala()
     t_cmd = threading.Thread(target=asculta_terminal, args=(twin,), daemon=True)
     t_cmd.start()
     ruleaza_sistem(twin)
-
-
+   
 

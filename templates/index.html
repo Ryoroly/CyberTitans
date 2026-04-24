@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Panou Control - Hala Digital Twin</title>
+    <title>Panou Control Digital Twin</title>
     <script type="text/javascript" src="https://www.gstatic.com/charts/loader.js"></script>
     <style>
         body { background-color: #0d1117; color: #c9d1d9; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; }
@@ -18,7 +18,7 @@
         .switch input { opacity: 0; width: 0; height: 0; }
         .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #2ea043; transition: .4s; border-radius: 34px; }
         .slider:before { position: absolute; content: ""; height: 26px; width: 26px; left: 4px; bottom: 4px; background-color: white; transition: .4s; border-radius: 50%; }
-        input:checked + .slider { background-color: #d29922; } /* Galben pentru Manual */
+        input:checked + .slider { background-color: #d29922; } 
         input:checked + .slider:before { transform: translateX(26px); }
 
         #hala-structura { background-color: #161b22; border-radius: 20px; padding: 40px; width: 90%; max-width: 900px; border: 2px solid #30363d; transition: box-shadow 0.6s ease, border-color 0.6s ease; position: relative; }
@@ -29,9 +29,12 @@
         .ecrane-top { display: flex; justify-content: space-between; gap: 20px; margin-bottom: 30px; }
         .ecran-digital { background-color: #010409; border: 1px solid #30363d; border-radius: 12px; padding: 20px; flex: 1; text-align: center; box-shadow: inset 0 0 15px rgba(0,0,0,0.8); }
         .ecran-titlu { font-size: 13px; color: #8b949e; text-transform: uppercase; margin-bottom: 8px; letter-spacing: 1px;}
-        .ecran-valoare { font-size: 22px; font-weight: bold; color: #ffffff; }
+        .ecran-valoare { font-size: 24px; font-weight: bold; color: #ffffff; display: flex; align-items: center; justify-content: center; gap: 15px;}
+        
+        /* Butoane ajustare temperatura */
+        .btn-ajust { background: #30363d; border: 1px solid #8b949e; color: white; width: 30px; height: 30px; border-radius: 5px; cursor: pointer; font-size: 18px; font-weight: bold; transition: 0.2s;}
+        .btn-ajust:hover { background: #58a6ff; border-color: #58a6ff; }
 
-        /* PANOU CONTROL MANUAL */
         #panou-manual { display: none; background: #21262d; border: 1px solid #d29922; border-radius: 12px; padding: 20px; margin-bottom: 30px; text-align: center; animation: slideDown 0.5s ease; }
         @keyframes slideDown { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
         
@@ -39,11 +42,11 @@
         .btn-control { background: #30363d; color: white; border: none; padding: 10px 20px; border-radius: 6px; font-weight: bold; cursor: pointer; margin: 0 10px; transition: 0.3s; }
         .btn-control:hover { background: #8b949e; }
         .btn-on { background: #2ea043; }
-        .btn-on:hover { background: #238636; }
-        input[type=range] { width: 60%; cursor: pointer; }
 
-        .ceasuri-wrapper { display: flex; justify-content: center; gap: 30px; flex-wrap: wrap; background-color: #21262d; padding: 25px; border-radius: 15px; border: 1px solid #30363d; }
-        
+        /* CEASURI MINIMALISTE DARK MODE */
+        .ceasuri-wrapper { display: flex; justify-content: center; gap: 30px; flex-wrap: wrap; background-color: #010409; padding: 25px; border-radius: 15px; border: 1px solid #30363d; }
+        .ceas-dark svg { filter: invert(0.85) hue-rotate(180deg); }
+
         .banner-status { margin-top: 25px; padding: 15px; border-radius: 8px; font-weight: bold; text-align: center; text-transform: uppercase; letter-spacing: 1px; color: white; transition: background-color 0.4s, border-color 0.4s; }
         .bg-verde { background-color: #2ea043; border-left: 6px solid #238636; }
         .bg-galben { background-color: #9e6a03; border-left: 6px solid #ffd700; animation: pulse 2s infinite; }
@@ -75,32 +78,34 @@
         <div class="ecrane-top">
             <div class="ecran-digital">
                 <div class="ecran-titlu">Temperatura Tinta Setata</div>
-                <div class="ecran-valoare"><span id="val-tinta">--</span> C</div>
+                <div class="ecran-valoare">
+                    <button class="btn-ajust" onclick="modificaTinta(-0.5)">-</button>
+                    <span id="val-tinta">--</span> C
+                    <button class="btn-ajust" onclick="modificaTinta(0.5)">+</button>
+                </div>
             </div>
             <div class="ecran-digital">
                 <div class="ecran-titlu">Status Actiune Curenta</div>
-                <div class="ecran-valoare" id="stare-text">Conectare...</div>
+                <div class="ecran-valoare" id="stare-text" style="font-size: 18px;">Conectare...</div>
             </div>
         </div>
 
         <div id="panou-manual">
-            <h3 style="margin-top: 0; color: #d29922;">?? OVERRIDE MANUAL</h3>
-            
+            <h3 style="margin-top: 0; color: #d29922; text-transform: uppercase;">Control Manual Echipamente</h3>
             <div class="control-grup">
-                <label>Turatie Ventilator: <span id="val-slider">0</span>%</label><br>
-                <input type="range" id="slider-vent" min="0" max="100" value="0" oninput="updateVent()">
+                <label>Turatie Ventilator: <span id="val-slider">0</span>%</label><br><br>
+                <input type="range" id="slider-vent" min="0" max="100" value="0" style="width: 80%;" oninput="updateVent()">
             </div>
-            
             <div class="control-grup">
                 <button id="btn-geam" class="btn-control" onclick="toggleGeam()">Geam: INCHIS</button>
                 <button id="btn-inc" class="btn-control" onclick="toggleIncalzire()">Incalzire: OPRITA</button>
             </div>
         </div>
 
-        <div class="ceasuri-wrapper">
-            <div id="gauge_temp" style="width: 200px; height: 200px;"></div>
-            <div id="gauge_pres" style="width: 200px; height: 200px;"></div>
-            <div id="gauge_vib" style="width: 200px; height: 200px;"></div>
+        <div class="ceasuri-wrapper ceas-dark">
+            <div id="gauge_temp" style="width: 180px; height: 180px;"></div>
+            <div id="gauge_pres" style="width: 180px; height: 180px;"></div>
+            <div id="gauge_vib" style="width: 180px; height: 180px;"></div>
         </div>
 
         <div id="banner-sistem" class="banner-status bg-verde">Sistemul se initializeaza...</div>
@@ -121,18 +126,19 @@
         let dataTemp, dataPres, dataVib;
         let optionsTemp, optionsPres, optionsVib;
 
-        // Variabile de stare pentru butoanele manuale
         let manualGeam = false;
         let manualInc = false;
+        let localTinta = 26.0;
 
         function initCharts() {
-            dataTemp = google.visualization.arrayToDataTable([['Label', 'Value'], ['Temp (C)', 0]]);
+            dataTemp = google.visualization.arrayToDataTable([['Label', 'Value'], ['Temp C', 0]]);
             dataPres = google.visualization.arrayToDataTable([['Label', 'Value'], ['Presiune', 0]]);
             dataVib = google.visualization.arrayToDataTable([['Label', 'Value'], ['Vibratii', 0]]);
 
-            optionsTemp = { min: 0, max: 50, yellowFrom: 28, yellowTo: 35, redFrom: 35, redTo: 50, minorTicks: 5 };
-            optionsPres = { min: 900, max: 1100, minorTicks: 10 };
-            optionsVib = { min: 0, max: 15, yellowFrom: 3, yellowTo: 6, redFrom: 6, redTo: 15, minorTicks: 1 };
+            // Ticks scosi pentru un look minimalist curat
+            optionsTemp = { min: 0, max: 50, yellowFrom: 28, yellowTo: 35, redFrom: 35, redTo: 50, minorTicks: 0, majorTicks: ['0', '', '', '', '', '50'] };
+            optionsPres = { min: 900, max: 1100, minorTicks: 0, majorTicks: ['900', '', '', '', '1100'] };
+            optionsVib = { min: 0, max: 15, yellowFrom: 3, yellowTo: 6, redFrom: 6, redTo: 15, minorTicks: 0, majorTicks: ['0', '', '', '15'] };
 
             chartTemp = new google.visualization.Gauge(document.getElementById('gauge_temp'));
             chartPres = new google.visualization.Gauge(document.getElementById('gauge_pres'));
@@ -145,23 +151,21 @@
             setInterval(fetchData, 1500); 
         }
 
-        // --- FUNCTII DE TRIMITERE COMENZI ---
         function trimiteComanda(date) {
-            fetch('/api/comanda', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(date)
-            }).catch(err => console.error("Eroare trimitere comanda:", err));
+            fetch('/api/comanda', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(date) });
+        }
+
+        function modificaTinta(delta) {
+            localTinta += delta;
+            document.getElementById('val-tinta').innerText = localTinta.toFixed(1);
+            trimiteComanda({ tinta: localTinta });
         }
 
         function schimbaMod() {
             const isManual = document.getElementById('switch-mod').checked;
             document.getElementById('lbl-auto').className = isManual ? "mod-text" : "mod-text mod-active";
             document.getElementById('lbl-manual').className = isManual ? "mod-text mod-active" : "mod-text";
-            
-            // Afisam/ascundem panoul
             document.getElementById('panou-manual').style.display = isManual ? "block" : "none";
-            
             trimiteComanda({ mod: isManual ? "MANUAL" : "AUTO" });
         }
 
@@ -187,7 +191,6 @@
             trimiteComanda({ inc: manualInc });
         }
 
-        // --- ACTUALIZARE DATE DE LA SERVER ---
         function fetchData() {
             fetch('/api/stare')
                 .then(response => response.json())
@@ -197,7 +200,10 @@
                     dataVib.setValue(0, 1, data.v);  chartVib.draw(dataVib, optionsVib);
 
                     document.getElementById('stare-text').innerText = data.msg;
-                    document.getElementById('val-tinta').innerText = data.tinta;
+               
+                    // Sincronizare tinta locala cu serverul pentru a nu se desincroniza
+                    localTinta = data.tinta;
+                    document.getElementById('val-tinta').innerText = localTinta.toFixed(1);
 
                     document.getElementById('hard-vent').innerText = data.vnt;
                     document.getElementById('hard-geam').innerText = data.g ? "DESCHIS (90 Grade)" : "INCHIS (180 Grade)";
@@ -209,7 +215,7 @@
 
                     let hala = document.getElementById('hala-structura');
                     hala.className = ''; 
-                    if (!data.auto) hala.classList.add('glow-galben'); // Manual mode e galben/auriu constant
+                    if (!data.auto) hala.classList.add('glow-galben'); 
                     else if (data.t > data.tinta + data.toleranta) hala.classList.add('glow-albastru'); 
                     else if (data.t < data.tinta - data.toleranta) hala.classList.add('glow-rosu'); 
                     else hala.classList.add('glow-galben'); 
@@ -221,7 +227,7 @@
                         banner.innerText = "SISTEM OPRIT MANUAL (BUTON FIZIC)";
                         banner.classList.add('bg-mov');
                     } else if (!data.auto) {
-                        banner.innerText = "OVERRIDE MANUAL: ECHIPAMENTELE SUNT CONTROLATE DE UTILIZATOR";
+                        banner.innerText = "OVERRIDE MANUAL ACTIVAT";
                         banner.classList.add('bg-manual');
                     } else if (data.aer) {
                         banner.innerText = "ALERTA GAZ: EVACUARE AER VICIAT!";
@@ -238,7 +244,6 @@
         }
     </script>
 </body>
-</html>
-
+</html>           
 
 
