@@ -1,278 +1,266 @@
 import time
 import threading
 import board
+import math
 import adafruit_dht
 import adafruit_bmp280
 import adafruit_mpu6050
 from gpiozero import DigitalInputDevice, PWMOutputDevice, Servo, LED
 
 # ==========================================
-# SETARI DE CONFIGURARE MANUALA
+# SETARI DE CONFIGURARE
 # ==========================================
-ACTIVARE_SENZOR_GAZ = 0      # 1 = Activ, 0 = Ignorat (bun daca il folosesti ca senzor de alcool)
-TEMPERATURA_TINTA = 26.0     # Temperatura la care vrei sa ajunga hala
-TOLERANTA_TEMP = 1.0         # +/- cate grade incep sa porneasca sistemele
+ACTIVARE_SENZOR_GAZ = 0      # 1 = Activ, 0 = Ignorat
+TEMPERATURA_TINTA = 26.0     # Temperatura dorita in hala
+TOLERANTA_TEMP = 1.0         # Pragul de activare (+/- grade)
 
 class DigitalTwinHala:
     def __init__(self):
         print("Initializare Creier Digital Twin...")
 
+        # Date Senzori
         self.temp = TEMPERATURA_TINTA
         self.umiditate = 50.0
         self.presiune = 1013.25
         self.calitate_aer_slaba = False 
         self.vibratii = 0.0
         
-        self.mesaj_predictie = "Sistem in calibrare..."
+        # Stari Sistem
+        self.mesaj_predictie = "Sistem in pornire..."
         self.alerta = "Niciuna"
-        
-        # Stari echipamente
         self.geam_deschis = False  
         self.incalzire_activa = False
         self.putere_ventilator = 0.0
-        self.culoare_led_rgb = "ALBASTRU" # Placeholder pentru viitorul LED RGB
+        self.culoare_led = "ALBASTRU"
+        
+        # Override Manual (Comenzi Terminal)
+        self.override_temp = None
+        self.override_servo = None
+        self.override_timp_expirare = 0.0
 
         self._init_hardware()
         self._verificare_sisteme()
 
     def _init_hardware(self):
-        try: 
-            self.dht = adafruit_dht.DHT22(board.D4)
-        except Exception as e: 
-            print(f"Avertisment DHT22: {e}")
-            self.dht = None
+        # 1. Conexiuni I2C si DHT
+        try: self.dht = adafruit_dht.DHT22(board.D4)
+        except: self.dht = None
 
         try:
             self.i2c = board.I2C()
             self.bmp = adafruit_bmp280.Adafruit_BMP280_I2C(self.i2c, address=0x76)
             self.mpu = adafruit_mpu6050.MPU6050(self.i2c)
-        except Exception as e: 
-            print(f"Avertisment I2C (BMP/MPU): {e}")
-            self.bmp = self.mpu = None
+        except: self.bmp = self.mpu = None
 
-        try: 
-            self.mq135 = DigitalInputDevice(17)
-        except Exception as e: 
-            print(f"Avertisment MQ-135: {e}")
-            self.mq135 = None
+        try: self.mq135 = DigitalInputDevice(17)
+        except: self.mq135 = None
 
+        # 2. Actuatori si LED-uri pe pinii stabiliti
         try:
             self.ventilator = PWMOutputDevice(13)
+            # Servo SG90: 180 grade este pozitia de INCHIS conform cerintei
             self.geam_servo = Servo(18, min_pulse_width=0.0005, max_pulse_width=0.0025)
             self.incalzire_rezistente = LED(27) 
             
-            # --- ADAUGAT PENTRU LED RGB ---
-            # Pin fizic 36 = GPIO 16 (Rosu), Pin fizic 38 = GPIO 20 (Albastru)
-            self.led_rosu = LED(16)
-            self.led_albastru = LED(20)
-            # ------------------------------
+            self.led_rosu = LED(5)      # Pin fizic 29
+            self.led_albastru = LED(20) # Pin fizic 38
 
-            # Stare initiala hardware
-            self.geam_servo.min()
+            # Stare initiala de siguranta: 180 grade (Inchis)
+            self.geam_servo.max()
             time.sleep(0.5)
             self.geam_servo.value = None
             self.ventilator.value = 0
             self.incalzire_rezistente.off()
             
-            # LED-ul incepe pe albastru (aer curat/normal)
             self.led_rosu.off()
             self.led_albastru.on()
             
         except Exception as e:
-            print(f"Eroare Initializare Actuatori: {e}")
-            self.ventilator = self.geam_servo = self.incalzire_rezistente = None
-            self.led_rosu = self.led_albastru = None
+            print(f"Eroare Hardware: {e}")
 
     def _verificare_sisteme(self):
-        # Cerinta din Word: Sa verifice la inceput daca merge incalzirea si racirea
-        print("Rulare auto-test echipamente (incalzire, servo, ventilator)...")
+        print("Auto-test: Verificare incalzire, ventilator si servo...")
         if self.incalzire_rezistente: self.incalzire_rezistente.on()
+        if self.led_rosu: self.led_rosu.on()
         if self.ventilator: self.ventilator.value = 0.5
-        if self.geam_servo: self.geam_servo.max()
+        if self.geam_servo: self.geam_servo.mid() # Deschide la 90 grade pt test
         time.sleep(1)
         if self.incalzire_rezistente: self.incalzire_rezistente.off()
+        if self.led_rosu: self.led_rosu.off()
         if self.ventilator: self.ventilator.value = 0
         if self.geam_servo: 
-            self.geam_servo.min()
+            self.geam_servo.max() # Inchide inapoi la 180 grade
             time.sleep(0.5)
             self.geam_servo.value = None
-        print("Auto-test completizat. Sistem gata.")
+        print("Auto-test finalizat.")
 
     def citeste_senzori(self):
+        # 1. DHT22
         if self.dht:
             try:
                 t = self.dht.temperature
                 h = self.dht.humidity
                 if t is not None: self.temp = round(t, 1)
                 if h is not None: self.umiditate = round(h, 1)
-            except RuntimeError: pass 
+            except: pass 
 
+        # 2. BMP280
         if self.bmp:
             try: self.presiune = round(self.bmp.pressure, 1)
-            except Exception: pass
+            except: pass
 
+        # 3. MPU6050 - Magnitudine vectoriala (Vibratii reale)
         if self.mpu:
             try:
                 x, y, z = self.mpu.acceleration
-                self.vibratii = round(abs(x) + abs(y) + abs(z - 9.8), 2)
-            except Exception: pass
+                val_vibratie = math.sqrt(x**2 + y**2 + z**2)
+                self.vibratii = round(abs(val_vibratie - 9.8), 2)
+            except: pass
 
+        # 4. MQ-135
         if ACTIVARE_SENZOR_GAZ == 1 and self.mq135:
             self.calitate_aer_slaba = self.mq135.value
         else:
             self.calitate_aer_slaba = False 
+            
+        # Aplicare Override Temp din Terminal
+        if time.time() < self.override_timp_expirare and self.override_temp is not None:
+            self.temp = self.override_temp
 
     def proceseaza_logica(self):
-        # Variabile temporare pentru starea decisa la acest ciclu
-        actiune_geam = False
-        actiune_incalzire = False
-        actiune_ventilator = 0.0
-        culoare_rgb_viitor = "ALBASTRU" # Default aer rece/normal
-        mesaj = "Parametri in limite optime."
+        act_geam = False   # False = Inchis (180 grade), True = Deschis (90 grade)
+        act_inc = False
+        act_vent = 0.0
+        culoare = "ALBASTRU"
+        msg = "Hala in parametri."
         
-        # Calculam diferenta pentru a vedea daca afisam timpul de rezolvare
-        diferenta_temp = abs(self.temp - TEMPERATURA_TINTA)
-        afiseaza_timp = (diferenta_temp >= 5.0)
+        diff = abs(self.temp - TEMPERATURA_TINTA)
+        afiseaza_timp = (diff >= 5.0)
 
-        # 1. Verificam intai calitatea aerului (Prioritate maxima)
+        # 1. PRIORITATE: Aer Viciat
         if self.calitate_aer_slaba:
-            self.alerta = "ALERTA: Calitate aer scazuta!"
-            actiune_geam = True       # Se deschide servo
-            actiune_incalzire = False # Fara incalzire cand evacuezi aerul
-            actiune_ventilator = 1.0  # Ventilator la maxim
-            culoare_rgb_viitor = "ALBASTRU"
-            mesaj = "Evacuare aer viciat (25 secunde estimat)."
-               
+            self.alerta = "ALERTA: Aer Viciat!"
+            act_geam = True
+            act_vent = 1.0
+            msg = "Evacuare aer (25s)."
         else:
             self.alerta = "Niciuna"
-            # 2. Scenariul de RACIRE (Temp creste)
+            # 2. RACIRE (Temp > Tinta)
             if self.temp > TEMPERATURA_TINTA + TOLERANTA_TEMP:
-                actiune_geam = True        # Servo deschis pentru racire
-                actiune_incalzire = False  # Oprim rezistentele
-                actiune_ventilator = 1.0   # Pornim ventilatorul
-                culoare_rgb_viitor = "ALBASTRU"
-                
-                if afiseaza_timp:
-                    mesaj = f"Racire activa. Se raceste in 20 secunde."
-                else:
-                    mesaj = "Racire usoara activa."
-                    
-            # 3. Scenariul de INCALZIRE (Temp scade)
+                act_geam = True  # Deschide geamul
+                act_vent = 1.0
+                if afiseaza_timp: msg = "Racire intensa (20s)."
+                else: msg = "Racire usoara."
+            # 3. INCALZIRE (Temp < Tinta)
             elif self.temp < TEMPERATURA_TINTA - TOLERANTA_TEMP:
-                actiune_geam = False       # Servo RAMANE INCHIS
-                actiune_incalzire = True   # Pornim rezistentele la intrare
-                actiune_ventilator = 1.0   # Pornim ventilatorul pentru a baga caldura
-                culoare_rgb_viitor = "ROSU"
-                
-                if afiseaza_timp:
-                    mesaj = f"Incalzire activa. Se incalzeste in 30 secunde."
-                else:
-                    mesaj = "Incalzire usoara activa."
-            
-            # 4. Scenariul de STABILITATE
+                act_geam = False # Inchis la incalzire (180 grade)
+                act_inc = True
+                act_vent = 1.0
+                culoare = "ROSU"
+                if afiseaza_timp: msg = "Incalzire intensa (30s)."
+                else: msg = "Incalzire usoara."
+            # 4. STABILIZAT (Tinta atinsa)
             else:
-                actiune_geam = False
-                actiune_incalzire = False
-                actiune_ventilator = 0.0
-                culoare_rgb_viitor = "ALBASTRU"
-                mesaj = f"Sistem stabilizat la tinta de {TEMPERATURA_TINTA} grade."
+                act_geam = False # Inchis pt conservare (180 grade)
+                msg = "Temperatura optima."
 
-        # VERIFICARE VIBRATII VENTILATOR (MPU6050)
-        if self.vibratii > 5.0 and actiune_ventilator > 0:
-            actiune_ventilator = 0.5 # Scade turatiile pentru lifespan 
-            mesaj += " [Limitare turatie activata din cauza vibratiilor]"
+        # Protectie Vibratii (Limitare Ventilator)
+        if self.vibratii > 5.0 and act_vent > 0:
+            act_vent = 0.5
+            msg += " [Limitare Vibratii]"
 
-        # APLICAM STARILE PE HARDWARE
-        # Geam (Servo)
-        if self.geam_servo and actiune_geam != self.geam_deschis:
-            if actiune_geam: self.geam_servo.max()
-            else: self.geam_servo.min()
+        # Override Servo din Terminal
+        if time.time() < self.override_timp_expirare and self.override_servo is not None:
+            act_geam = self.override_servo
+            msg = f"[MANUAL] {msg}"
+
+        # --- EXECUTIE HARDWARE ---
+        # Servo (180 grade = Inchis, 90 grade = Deschis)
+        if self.geam_servo and act_geam != self.geam_deschis:
+            if act_geam: 
+                self.geam_servo.mid() # 90 grade (Deschis)
+            else: 
+                self.geam_servo.max() # 180 grade (Inchis)
             time.sleep(0.5)
-            self.geam_servo.value = None 
-            self.geam_deschis = actiune_geam
+            self.geam_servo.value = None
+            self.geam_deschis = act_geam
              
-        # Incalzire (LED/Releu)
-        if self.incalzire_rezistente and actiune_incalzire != self.incalzire_activa:
-            if actiune_incalzire: self.incalzire_rezistente.on()
+        # Incalzire Rezistente
+        if self.incalzire_rezistente:
+            if act_inc: self.incalzire_rezistente.on()
             else: self.incalzire_rezistente.off()
-            self.incalzire_activa = actiune_incalzire
+            self.incalzire_activa = act_inc
 
-        # Ventilator
-        if self.ventilator:
-            self.ventilator.value = actiune_ventilator
+        # Ventilator PWM
+        if self.ventilator: self.ventilator.value = act_vent
             
-        # --- NOU: LOGICA LED RGB ---
-        if culoare_rgb_viitor == "ROSU":
+        # LED-uri Indicator (Rosu Pin 29 / Albastru Pin 38)
+        if culoare == "ROSU":
             if self.led_albastru: self.led_albastru.off()
             if self.led_rosu: self.led_rosu.on()
-        else: # Daca e ALBASTRU
+        else:
             if self.led_rosu: self.led_rosu.off()
             if self.led_albastru: self.led_albastru.on()
-        # -----------------------------
 
-        self.putere_ventilator = actiune_ventilator
-        self.mesaj_predictie = mesaj
-        self.culoare_led_rgb = culoare_rgb_viitor
+        self.putere_ventilator = act_vent
+        self.mesaj_predictie = msg
+        self.culoare_led = culoare
 
-    def obtine_stare_sistem(self):
+    def obtine_stare(self):
         return {
-            "temp": self.temp,
-            "umiditate": self.umiditate,
-            "presiune": self.presiune,
-            "vibratii": self.vibratii,
-            "aer_viciat": self.calitate_aer_slaba,
-            "geam_deschis": self.geam_deschis,
-            "incalzire": self.incalzire_activa,
-            "ventilator_rpm": int(self.putere_ventilator * 100),
-            "predictie": self.mesaj_predictie,
-            "alerta": self.alerta,
-            "led_rgb": self.culoare_led_rgb
+            "t": self.temp, "u": self.umiditate, "p": self.presiune,
+            "v": self.vibratii, "aer": self.calitate_aer_slaba,
+            "g": self.geam_deschis, "inc": self.incalzire_activa,
+            "vnt": int(self.putere_ventilator * 100),
+            "msg": self.mesaj_predictie, "led": self.culoare_led
         }
 
-# ==========================================
-# BUCLA PRINCIPALA (TERMINAL)
-# ==========================================
+# --- FUNCTIE ASCULTARE COMENZI TERMINAL ---
+def asculta_terminal(twin):
+    while True:
+        try:
+            c = input().strip().lower()
+            if c.startswith("temp "):
+                twin.override_temp = float(c.split()[1])
+                twin.override_timp_expirare = time.time() + 10.0
+            elif c == "servo deschis":
+                twin.override_servo = True
+                twin.override_timp_expirare = time.time() + 10.0
+            elif c == "servo inchis":
+                twin.override_servo = False
+                twin.override_timp_expirare = time.time() + 10.0
+        except: pass
+
+# --- RULARE PRINCIPALA ---
 if __name__ == "__main__":
     twin = DigitalTwinHala()
-    print("\nMonitorizare live inceputa. Apasa Ctrl+C pentru oprire.\n")
-    time.sleep(2)
+    t_cmd = threading.Thread(target=asculta_terminal, args=(twin,), daemon=True)
+    t_cmd.start()
+    
+    print("Sistem Activ. Comenzi: 'temp [val]', 'servo deschis', 'servo inchis'\n")
 
     try:
         while True:
             twin.citeste_senzori()
             twin.proceseaza_logica()
+            s = twin.obtine_stare()
             
-            date = twin.obtine_stare_sistem()
-            
-            status_geam = "DESCHIS" if date['geam_deschis'] else "INCHIS"
-            status_inc = "PORNITA" if date['incalzire'] else "OPRITA"
-            status_aer = "SLABA (GAZ/ALCOOL)" if date['aer_viciat'] else "CURAT"
-
-            print(f"Temperatura: {date['temp']} C (Tinta: {TEMPERATURA_TINTA} C) | Umiditate: {date['umiditate']}% | Presiune: {date['presiune']} hPa | Vibratii: {date['vibratii']}")
-            print(f"Sistem: Ventilator {date['ventilator_rpm']}% | Geam: {status_geam} | Incalzire: {status_inc} | Aer: {status_aer} | LED RGB intrare: {date['led_rgb']}")
-            
-            if date['alerta'] != "Niciuna":
-                print(f"!!! {date['alerta']} !!!")
-                
-            print(f"Status: {date['predictie']}")
-            print("-" * 70)
-            
+            print(f"[{s['led']}] Temp: {s['t']}C | Vib: {s['v']} | Pres: {s['p']}")
+            print(f"Vent: {s['vnt']}% | Geam: {'DESCHIS' if s['g'] else 'INCHIS'} | Rezistente: {'DA' if s['inc'] else 'NU'}")
+            print(f"Status: {s['msg']}")
+            print("-" * 55)
             time.sleep(1.5)
 
     except KeyboardInterrupt:
-        print("\nOprire ceruta de utilizator. Oprim echipamentele in siguranta...")
-        
+        print("\nInchidere securizata... Oprim hardware-ul.")
         if twin.ventilator: twin.ventilator.value = 0
-        if twin.geam_servo:
-            twin.geam_servo.min()
-            time.sleep(0.5)
-            twin.geam_servo.detach()
         if twin.incalzire_rezistente: twin.incalzire_rezistente.off()
-        
-        # Oprim si LED-urile
         if twin.led_rosu: twin.led_rosu.off()
         if twin.led_albastru: twin.led_albastru.off()
-        
-        print("Sistem oprit cu succes.")
-
+        if twin.geam_servo:
+            print("Inchidere clapa (180 grade)...")
+            twin.geam_servo.max() # Pozitia de inchis la 180 grade
+            time.sleep(1)
+            twin.geam_servo.detach()
+        print("Sistem oprit complet.")
 
