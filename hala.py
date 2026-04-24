@@ -11,7 +11,7 @@ from gpiozero import DigitalInputDevice, PWMOutputDevice, Servo, LED, Button
 # SETARI DE CONFIGURARE
 # ==========================================
 ACTIVARE_SENZOR_GAZ = 0      # 1 = Activ, 0 = Ignorat
-TEMPERATURA_TINTA = 29.0     # Temperatura dorita in hala
+TEMPERATURA_TINTA = 30.0     #emperatura dorita in hala
 TOLERANTA_TEMP = 1.0         # Pragul de activare (+/- grade)
 
 class DigitalTwinHala:
@@ -184,7 +184,7 @@ class DigitalTwinHala:
                     msg = "Temperatura optima."
 
             # Logica corectata pentru vibratii
-            if self.vibratii > 5.0:
+            if self.vibratii > 3.0:
                 alerta_vibratie = True # Se aprinde LED-ul Galben indiferent de situatie
                 msg += " [ALERTA VIBRATII]"
                 if act_vent > 0:       # Daca ventilatorul mergea, il reducem
@@ -262,15 +262,25 @@ def asculta_terminal(twin):
                 twin.override_servo = False
                 twin.override_timp_expirare = time.time() + 10.0
         except: pass
+# --- FUNCTIE ASCULTARE COMENZI TERMINAL ---
+def asculta_terminal(twin):
+    while True:
+        try:
+            c = input().strip().lower()
+            if c.startswith("temp "):
+                twin.override_temp = float(c.split()[1])
+                twin.override_timp_expirare = time.time() + 10.0
+            elif c == "servo deschis":
+                twin.override_servo = True
+                twin.override_timp_expirare = time.time() + 10.0
+            elif c == "servo inchis":
+                twin.override_servo = False
+                twin.override_timp_expirare = time.time() + 10.0
+        except: pass
 
-# --- RULARE PRINCIPALA ---
-if __name__ == "__main__":
-    twin = DigitalTwinHala()
-    t_cmd = threading.Thread(target=asculta_terminal, args=(twin,), daemon=True)
-    t_cmd.start()
-    
-    print("Sistem Activ. Comenzi: 'temp [val]', 'servo deschis', 'servo inchis'\n")
-
+# --- NOU: FUNCTIA PRINCIPALA DE RULARE ---
+def ruleaza_sistem(twin):
+    print("\nSistem Activ. Comenzi: 'temp [val]', 'servo deschis', 'servo inchis'\n")
     try:
         while True:
             twin.citeste_senzori()
@@ -299,5 +309,12 @@ if __name__ == "__main__":
             time.sleep(1)
             twin.geam_servo.detach()
         print("Sistem oprit complet.")
+
+# --- RULARE DIRECTA (Cand executi doar hala.py) ---
+if __name__ == "__main__":
+    twin = DigitalTwinHala()
+    t_cmd = threading.Thread(target=asculta_terminal, args=(twin,), daemon=True)
+    t_cmd.start()
+    ruleaza_sistem(twin)
 
 

@@ -3,117 +3,215 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CyberTitans - Dashboard Hala</title>
+    <title>Panou Control - Hala Digital Twin</title>
+    <script type="text/javascript" src="https://www.gstatic.com/charts/loader.js"></script>
     <style>
-        :root {
-            --primary: #00ff88;
-            --bg: #121212;
-            --card-bg: #1e1e1e;
-            --text: #ffffff;
-        }
-
+        /* TEMA INCHISA (DARK MODE) */
         body {
+            background-color: #0d1117;
+            color: #c9d1d9;
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background-color: var(--bg);
-            color: var(--text);
             margin: 0;
+            padding: 20px;
             display: flex;
             flex-direction: column;
             align-items: center;
-            padding: 20px;
         }
 
         h1 {
-            color: var(--primary);
+            color: #58a6ff;
             text-transform: uppercase;
             letter-spacing: 2px;
+            font-size: 26px;
             margin-bottom: 30px;
-            font-size: 1.5rem;
         }
 
-        .grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-            gap: 15px;
-            width: 100%;
-            max-width: 500px;
-        }
-
-        .card {
-            background-color: var(--card-bg);
-            padding: 20px;
-            border-radius: 15px;
-            border: 1px solid #333;
-            text-align: center;
-            transition: transform 0.2s;
-        }
-
-        .card:active {
-            transform: scale(0.95);
-        }
-
-        .label {
-            font-size: 0.8rem;
-            color: #888;
-            margin-bottom: 10px;
-            display: block;
-        }
-
-        .value {
-            font-size: 1.8rem;
-            font-weight: bold;
-            color: var(--primary);
-        }
-
-        .unit {
-            font-size: 0.9rem;
-            color: var(--primary);
-            opacity: 0.8;
-        }
-
-        .status {
-            margin-top: 10px;
-            font-size: 0.7rem;
-            padding: 5px 10px;
+        /* CONTAINERUL PRINCIPAL (Reprezinta HALA) */
+        #hala-structura {
+            background-color: #161b22;
             border-radius: 20px;
-            background: #2a2a2a;
-            display: inline-block;
+            padding: 40px;
+            width: 90%;
+            max-width: 900px;
+            border: 2px solid #30363d;
+            /* Aici se aplica tranzitia lina pentru GLOW */
+            transition: box-shadow 0.6s ease, border-color 0.6s ease;
+            position: relative;
         }
+
+        /* EFECTELE DE GLOW EXTERIOR */
+        .glow-rosu { box-shadow: 0 0 60px rgba(255, 77, 77, 0.4); border-color: #ff4d4d !important; }
+        .glow-albastru { box-shadow: 0 0 60px rgba(77, 166, 255, 0.4); border-color: #4da6ff !important; }
+        .glow-galben { box-shadow: 0 0 60px rgba(255, 204, 0, 0.3); border-color: #ffcc00 !important; }
+
+        /* ECRANE EXTERIOARE (Sus) */
+        .ecrane-top {
+            display: flex;
+            justify-content: space-between;
+            gap: 20px;
+            margin-bottom: 40px;
+        }
+
+        .ecran-digital {
+            background-color: #010409;
+            border: 1px solid #30363d;
+            border-radius: 12px;
+            padding: 20px;
+            flex: 1;
+            text-align: center;
+            box-shadow: inset 0 0 15px rgba(0,0,0,0.8);
+        }
+
+        .ecran-titlu { font-size: 13px; color: #8b949e; text-transform: uppercase; margin-bottom: 8px; letter-spacing: 1px;}
+        .ecran-valoare { font-size: 22px; font-weight: bold; color: #ffffff; }
+
+        /* ZONA CENTRALA CU CEASURI */
+        .ceasuri-wrapper {
+            display: flex;
+            justify-content: center;
+            gap: 30px;
+            flex-wrap: wrap;
+            background-color: #21262d;
+            padding: 25px;
+            border-radius: 15px;
+            border: 1px solid #30363d;
+        }
+
+        /* STILIZARE ALERTE (Scenarii) */
+        .alerta-box { display: none; margin-top: 25px; padding: 15px; border-radius: 8px; font-weight: bold; text-align: center; text-transform: uppercase; letter-spacing: 1px; color: white;}
+        .alerta-vib { background-color: #9e6a03; display: block; border-left: 6px solid #ffd700; animation: pulse 2s infinite;}
+        .alerta-gaz { background-color: #8a1515; display: block; border-left: 6px solid #ff4d4d; }
+        .alerta-kill { background-color: #551a8b; display: block; border-left: 6px solid #9933ff; }
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.7; }
+            100% { opacity: 1; }
+        }
+
+        /* ECRAN HARDWARE (Jos) */
+        .hardware-panel {
+            margin-top: 30px;
+            background-color: #010409;
+            padding: 20px;
+            border-radius: 12px;
+            border: 1px solid #30363d;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 15px;
+            color: #8b949e;
+        }
+        .hardware-panel span { color: #58a6ff; font-weight: bold; }
     </style>
 </head>
 <body>
 
-    <h1>CyberTitans Monitor</h1>
 
-    <div class="grid">
-        <div class="card">
-            <span class="label">TEMPERATURA</span>
-            <span class="value">{{ date.temp }}</span><span class="unit">�C</span>
-            <div class="status">Senzor Activ</div>
+    <h1>Panou Control Digital Twin</h1>
+
+    <div id="hala-structura" class="glow-galben">
+        
+        <div class="ecrane-top">
+            <div class="ecran-digital">
+                <div class="ecran-titlu">Temperatura Tinta Setata</div>
+                <div class="ecran-valoare"><span id="val-tinta">--</span> C</div>
+            </div>
+            <div class="ecran-digital">
+                <div class="ecran-titlu">Status Actiune Curenta</div>
+                <div class="ecran-valoare" id="stare-text">Conectare...</div>
+            </div>
         </div>
 
-        <div class="card">
-            <span class="label">CALITATE AER</span>
-            <span class="value">{{ date.aer }}</span>
-            <div class="status">Monitorizare</div>
+        <div class="ceasuri-wrapper">
+            <div id="gauge_temp" style="width: 200px; height: 200px;"></div>
+            <div id="gauge_pres" style="width: 200px; height: 200px;"></div>
+            <div id="gauge_vib" style="width: 200px; height: 200px;"></div>
         </div>
 
-        <div class="card">
-            <span class="label">VENTILATOR</span>
-            <span class="value">{{ date.ventilator }}</span>
-            <div class="status">Sistem Racire</div>
+        <div id="alerta-vib" class="alerta-box">ALERTA VIBRATII: Turatie ventilator redusa!</div>
+        <div id="alerta-gaz" class="alerta-box">ALERTA GAZ: Evacuare aer viciat!</div>
+        <div id="alerta-kill" class="alerta-box">KILL SWITCH ACTIVAT: Mod aer combinat. Totul este oprit!</div>
+
+        <div class="hardware-panel">
+            <div style="margin-bottom: 10px; color: #c9d1d9;">[ DIAGNOSTIC HARDWARE ]</div>
+            Ventilator: <span id="hard-vent">--</span>% <br>
+            Servo Geam: <span id="hard-geam">--</span> <br>
+            Rezistente Incalzire: <span id="hard-inc">--</span> <br>
+            Comanda LED: <span id="hard-led">--</span>
         </div>
 
-        <div class="card">
-            <span class="label">GEAM (SERVO)</span>
-            <span class="value">�NCHIS</span>
-            <div class="status">Automatizat</div>
-        </div>
     </div>
 
-    <p style="margin-top: 40px; color: #444; font-size: 0.7rem;">
-        CONNECTED TO RASPBERRY PI IP: 192.168.137.141
-    </p>
+    <script>
+        google.charts.load('current', {'packages':['gauge']});
+        google.charts.setOnLoadCallback(initCharts);
 
+        let chartTemp, chartPres, chartVib;
+        let dataTemp, dataPres, dataVib;
+        let optionsTemp, optionsPres, optionsVib;
+
+        function initCharts() {
+            // Am eliminat complet semnele speciale
+            dataTemp = google.visualization.arrayToDataTable([['Label', 'Value'], ['Temp (C)', 0]]);
+            dataPres = google.visualization.arrayToDataTable([['Label', 'Value'], ['Presiune', 0]]);
+            dataVib = google.visualization.arrayToDataTable([['Label', 'Value'], ['Vibratii', 0]]);
+
+            optionsTemp = { min: 0, max: 50, yellowFrom: 28, yellowTo: 35, redFrom: 35, redTo: 50, minorTicks: 5 };
+            optionsPres = { min: 900, max: 1100, minorTicks: 10 };
+            optionsVib = { min: 0, max: 15, yellowFrom: 3, yellowTo: 6, redFrom: 6, redTo: 15, minorTicks: 1 };
+
+            chartTemp = new google.visualization.Gauge(document.getElementById('gauge_temp'));
+            chartPres = new google.visualization.Gauge(document.getElementById('gauge_pres'));
+            chartVib = new google.visualization.Gauge(document.getElementById('gauge_vib'));
+
+            chartTemp.draw(dataTemp, optionsTemp);
+            chartPres.draw(dataPres, optionsPres);
+            chartVib.draw(dataVib, optionsVib);
+
+            setInterval(fetchData, 1500); 
+        }
+
+        function fetchData() {
+            fetch('/api/stare')
+                .then(response => response.json())
+                .then(data => {
+                    // Update Ceasuri
+                    dataTemp.setValue(0, 1, data.t); chartTemp.draw(dataTemp, optionsTemp);
+                    dataPres.setValue(0, 1, data.p); chartPres.draw(dataPres, optionsPres);
+                    dataVib.setValue(0, 1, data.v);  chartVib.draw(dataVib, optionsVib);
+
+                    // Update Ecrane Exterioare
+                    document.getElementById('stare-text').innerText = data.msg;
+                    document.getElementById('val-tinta').innerText = data.tinta;
+
+                    // Update Terminal Hardware
+                    document.getElementById('hard-vent').innerText = data.vnt;
+                    document.getElementById('hard-geam').innerText = data.g ? "DESCHIS (90 Grade)" : "INCHIS (180 Grade)";
+                    document.getElementById('hard-inc').innerText = data.inc ? "PORNITA" : "OPRITA";
+                    document.getElementById('hard-led').innerText = data.led;
+
+                    // LOGICA PENTRU GLOW-UL EXTERIOR
+                    let hala = document.getElementById('hala-structura');
+                    hala.className = ''; // Resetam clasele
+                    
+                    if (data.t > data.tinta + data.toleranta) {
+                        // Prea cald -> Glow Albastru (Sistemul baga rece)
+                        hala.classList.add('glow-albastru'); 
+                    } else if (data.t < data.tinta - data.toleranta) {
+                        // Prea rece -> Glow Rosu (Sistemul baga caldura)
+                        hala.classList.add('glow-rosu'); 
+                    } else {
+                        // Optim -> Glow Galben (Asteptare/Normal)
+                        hala.classList.add('glow-galben'); 
+                    }
+
+                    // ALERTE SCENARII WHAT IF
+                    document.getElementById('alerta-vib').className = data.alert_vib ? 'alerta-box alerta-vib' : 'alerta-box';
+                    document.getElementById('alerta-gaz').className = data.aer ? 'alerta-box alerta-gaz' : 'alerta-box';
+                    document.getElementById('alerta-kill').className = (data.led === "AMBELE") ? 'alerta-box alerta-kill' : 'alerta-box';
+                })
+                .catch(err => console.error("Asteptare server...", err));
+        }
+    </script>
 </body>
 </html>
+
