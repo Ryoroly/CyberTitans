@@ -29,9 +29,13 @@ def api_comanda():
     if 'mod' in date_primite:
         twin_global.mod_auto = (date_primite['mod'] == 'AUTO')
         
-    # NOU: Schimbarea Temperaturii Tinta
+    # Schimbarea Temperaturii Tinta
     if 'tinta' in date_primite:
         twin_global.temperatura_tinta = float(date_primite['tinta'])
+        
+    # NOU: Comanda pentru Kill Switch (Web)
+    if 'kill' in date_primite:
+        twin_global.mod_aer_combinat = bool(date_primite['kill'])
         
     # Comenzi Manuale
     if 'vent' in date_primite:

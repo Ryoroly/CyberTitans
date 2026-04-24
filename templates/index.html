@@ -9,8 +9,11 @@
         body { background-color: #0d1117; color: #c9d1d9; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; }
         h1 { color: #58a6ff; text-transform: uppercase; letter-spacing: 2px; font-size: 26px; margin-bottom: 20px; }
 
+        /* HEADER CONTROALE SUPERIOARE */
+        .top-controls { display: flex; justify-content: center; align-items: center; gap: 30px; margin-bottom: 20px; width: 90%; max-width: 900px; flex-wrap: wrap;}
+
         /* SWITCH AUTO/MANUAL */
-        .mod-container { display: flex; align-items: center; gap: 15px; margin-bottom: 20px; background: #161b22; padding: 10px 20px; border-radius: 30px; border: 1px solid #30363d; }
+        .mod-container { display: flex; align-items: center; gap: 15px; background: #161b22; padding: 10px 20px; border-radius: 30px; border: 1px solid #30363d; }
         .mod-text { font-weight: bold; font-size: 18px; color: #8b949e; transition: color 0.3s; }
         .mod-active { color: #58a6ff; text-shadow: 0 0 10px rgba(88, 166, 255, 0.5); }
         
@@ -21,10 +24,18 @@
         input:checked + .slider { background-color: #d29922; } 
         input:checked + .slider:before { transform: translateX(26px); }
 
+        /* BUTON WEB KILL SWITCH */
+        .btn-kill-web { background: transparent; border: 2px solid #ff4d4d; color: #ff4d4d; padding: 12px 25px; border-radius: 30px; font-weight: bold; font-size: 16px; cursor: pointer; transition: all 0.3s; text-transform: uppercase; letter-spacing: 1px;}
+        .btn-kill-web:hover { background: rgba(255, 77, 77, 0.1); }
+        .btn-kill-active { background: #9933ff !important; border-color: #9933ff !important; color: white !important; box-shadow: 0 0 15px rgba(153, 51, 255, 0.6); }
+
         #hala-structura { background-color: #161b22; border-radius: 20px; padding: 40px; width: 90%; max-width: 900px; border: 2px solid #30363d; transition: box-shadow 0.6s ease, border-color 0.6s ease; position: relative; }
+        
+        /* CULORI GLOW EXTERIOR */
         .glow-rosu { box-shadow: 0 0 60px rgba(255, 77, 77, 0.4); border-color: #ff4d4d !important; }
         .glow-albastru { box-shadow: 0 0 60px rgba(77, 166, 255, 0.4); border-color: #4da6ff !important; }
         .glow-galben { box-shadow: 0 0 60px rgba(255, 204, 0, 0.3); border-color: #ffcc00 !important; }
+        .glow-mov { box-shadow: 0 0 80px rgba(153, 51, 255, 0.6); border-color: #9933ff !important; } /* NOU: Glow Mov */
 
         .ecrane-top { display: flex; justify-content: space-between; gap: 20px; margin-bottom: 30px; }
         .ecran-digital { background-color: #010409; border: 1px solid #30363d; border-radius: 12px; padding: 20px; flex: 1; text-align: center; box-shadow: inset 0 0 15px rgba(0,0,0,0.8); }
@@ -64,13 +75,17 @@
 
     <h1>Panou Control Digital Twin</h1>
 
-    <div class="mod-container">
-        <span id="lbl-auto" class="mod-text mod-active">AUTO</span>
-        <label class="switch">
-            <input type="checkbox" id="switch-mod" onchange="schimbaMod()">
-            <span class="slider"></span>
-        </label>
-        <span id="lbl-manual" class="mod-text">MANUAL</span>
+    <div class="top-controls">
+        <div class="mod-container">
+            <span id="lbl-auto" class="mod-text mod-active">AUTO</span>
+            <label class="switch">
+                <input type="checkbox" id="switch-mod" onchange="schimbaMod()">
+                <span class="slider"></span>
+            </label>
+            <span id="lbl-manual" class="mod-text">MANUAL</span>
+        </div>
+        
+        <button id="btn-web-kill" class="btn-kill-web" onclick="toggleWebKill()">AER COMBINAT (KILL SWITCH)</button>
     </div>
 
     <div id="hala-structura" class="glow-galben">
@@ -129,13 +144,13 @@
         let manualGeam = false;
         let manualInc = false;
         let localTinta = 26.0;
+        let isKillActive = false; // Starea locala pentru Kill Switch
 
         function initCharts() {
             dataTemp = google.visualization.arrayToDataTable([['Label', 'Value'], ['Temp C', 0]]);
             dataPres = google.visualization.arrayToDataTable([['Label', 'Value'], ['Presiune', 0]]);
             dataVib = google.visualization.arrayToDataTable([['Label', 'Value'], ['Vibratii', 0]]);
 
-            // Ticks scosi pentru un look minimalist curat
             optionsTemp = { min: 0, max: 50, yellowFrom: 28, yellowTo: 35, redFrom: 35, redTo: 50, minorTicks: 0, majorTicks: ['0', '', '', '', '', '50'] };
             optionsPres = { min: 900, max: 1100, minorTicks: 0, majorTicks: ['900', '', '', '', '1100'] };
             optionsVib = { min: 0, max: 15, yellowFrom: 3, yellowTo: 6, redFrom: 6, redTo: 15, minorTicks: 0, majorTicks: ['0', '', '', '15'] };
@@ -169,6 +184,12 @@
             trimiteComanda({ mod: isManual ? "MANUAL" : "AUTO" });
         }
 
+        // --- NOU: Functia pentru Butonul Web de Kill Switch ---
+        function toggleWebKill() {
+            isKillActive = !isKillActive;
+            trimiteComanda({ kill: isKillActive });
+        }
+
         function updateVent() {
             let val = document.getElementById('slider-vent').value;
             document.getElementById('val-slider').innerText = val;
@@ -200,8 +221,6 @@
                     dataVib.setValue(0, 1, data.v);  chartVib.draw(dataVib, optionsVib);
 
                     document.getElementById('stare-text').innerText = data.msg;
-               
-                    // Sincronizare tinta locala cu serverul pentru a nu se desincroniza
                     localTinta = data.tinta;
                     document.getElementById('val-tinta').innerText = localTinta.toFixed(1);
 
@@ -209,22 +228,44 @@
                     document.getElementById('hard-geam').innerText = data.g ? "DESCHIS (90 Grade)" : "INCHIS (180 Grade)";
                     
                     let functie = "RACIRE";
-                    if (data.led === "AMBELE") functie = "TEMPERATURA AMBIENTALA";
+                    isKillActive = (data.led === "AMBELE"); // Sincronizare cu starea reala (web sau fizica)
+
+                    if (isKillActive) functie = "TEMPERATURA AMBIENTALA";
                     else if (data.led === "ROSU") functie = "INCALZIRE";
                     document.getElementById('hard-functie').innerText = functie;
 
+                    // --- ACTUALIZARE VIZUALA BUTON KILL SWITCH ---
+                    let btnKill = document.getElementById('btn-web-kill');
+                    if (isKillActive) {
+                        btnKill.classList.add('btn-kill-active');
+                        btnKill.innerText = "SISTEM OPRIT (AER COMBINAT)";
+                    } else {
+                        btnKill.classList.remove('btn-kill-active');
+                        btnKill.innerText = "AER COMBINAT (KILL SWITCH)";
+                    }
+
+                    // --- LOGICA PENTRU GLOW-UL EXTERIOR AL HALEI (Inclusiv MOV) ---
                     let hala = document.getElementById('hala-structura');
                     hala.className = ''; 
-                    if (!data.auto) hala.classList.add('glow-galben'); 
-                    else if (data.t > data.tinta + data.toleranta) hala.classList.add('glow-albastru'); 
-                    else if (data.t < data.tinta - data.toleranta) hala.classList.add('glow-rosu'); 
-                    else hala.classList.add('glow-galben'); 
+                    
+                    if (isKillActive) {
+                        hala.classList.add('glow-mov'); 
+                    } else if (!data.auto) {
+                        hala.classList.add('glow-galben'); 
+                    } else if (data.t > data.tinta + data.toleranta) {
+                        hala.classList.add('glow-albastru'); 
+                    } else if (data.t < data.tinta - data.toleranta) {
+                        hala.classList.add('glow-rosu'); 
+                    } else {
+                        hala.classList.add('glow-galben'); 
+                    }
 
+                    // --- LOGICA BANNER INFERIOR ---
                     let banner = document.getElementById('banner-sistem');
                     banner.className = 'banner-status '; 
                     
-                    if (data.led === "AMBELE") {
-                        banner.innerText = "SISTEM OPRIT MANUAL (BUTON FIZIC)";
+                    if (isKillActive) {
+                        banner.innerText = "SISTEM OPRIT MANUAL (MOD AER COMBINAT)";
                         banner.classList.add('bg-mov');
                     } else if (!data.auto) {
                         banner.innerText = "OVERRIDE MANUAL ACTIVAT";
@@ -244,6 +285,9 @@
         }
     </script>
 </body>
-</html>           
+</html>
+
+
+
 
 
