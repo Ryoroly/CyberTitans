@@ -20,7 +20,7 @@ class DigitalTwinHala:
 
         # Date Senzori
         self.temp = TEMPERATURA_TINTA_INITIALA
-        self.temperatura_tinta = TEMPERATURA_TINTA_INITIALA # NOU: Tinta controlabila
+        self.temperatura_tinta = TEMPERATURA_TINTA_INITIALA
         self.umiditate = 50.0
         self.presiune = 1013.25
         self.calitate_aer_slaba = False 
@@ -34,9 +34,13 @@ class DigitalTwinHala:
         self.culoare_led = "ALBASTRU"
         self.alerta_vibratii = False
         
-        # PWM Fluid 
+        # PWM Fluid si Medie pentru Afisare (Smooth UI)
         self.target_ventilator = 0.0
         self.putere_curenta_ventilator = 0.0
+        self.istoric_vent = [0.0] * 10 # Stocheaza valorile din ultima secunda
+        
+        # Memorie Vibratii (Cooldown)
+        self.timp_expirare_vibratii = 0.0
         
         # Mod Manual Web
         self.mod_auto = True         
@@ -44,7 +48,7 @@ class DigitalTwinHala:
         self.manual_geam = False     
         self.manual_inc = False      
         
-        # Override Vechi (pentru terminal)
+        # Override Vechi
         self.override_temp = None
         self.override_servo = None
         self.override_timp_expirare = 0.0
@@ -68,6 +72,7 @@ class DigitalTwinHala:
 
         try: self.mq135 = DigitalInputDevice(17)
         except: self.mq135 = None
+
 
         try:
             self.ventilator = PWMOutputDevice(13)
@@ -108,9 +113,15 @@ class DigitalTwinHala:
                     self.putere_curenta_ventilator -= pas_scadere
                     if self.putere_curenta_ventilator < self.target_ventilator:
                         self.putere_curenta_ventilator = self.target_ventilator
+                
                 try:
                     val_sigura = max(0.0, min(1.0, self.putere_curenta_ventilator))
                     self.ventilator.value = val_sigura
+                    
+                    # Salvam valoarea in istoric pentru o afisare fluida (media pe ultima secunda)
+                    self.istoric_vent.append(val_sigura)
+                    if len(self.istoric_vent) > 10:
+                        self.istoric_vent.pop(0)
                 except: pass
             time.sleep(0.1)
 
@@ -168,16 +179,17 @@ class DigitalTwinHala:
         msg = "Hala in parametri optimi."
         alerta_vibratie = False
         
-        diff = abs(self.temp - self.temperatura_tinta)
+        # Diferenta curenta fata de tinta
+        delta_temp = abs(self.temp - self.temperatura_tinta)
 
-        # 1. VERIFICARE BUTON FIZIC
+        # 1. VERIFICARE BUTON FIZIC SAU WEB (Kill Switch)
         if self.mod_aer_combinat:
-            self.alerta = "MOD AER COMBINAT (Manual Fizic)"
+            self.alerta = "MOD AER COMBINAT"
             act_geam = False   
             act_inc = False    
             target_vent_nou = 0.0  
             culoare = "AMBELE" 
-            msg = "[OVERRIDE FIZIC] Asteptare aer combinat. Se opreste lent."
+            msg = "Sistem oprit in siguranta (Aer Combinat)."
             
         # 2. MOD MANUAL DIN WEB
         elif not self.mod_auto:
@@ -185,20 +197,24 @@ class DigitalTwinHala:
             act_geam = self.manual_geam
             act_inc = self.manual_inc
             target_vent_nou = self.manual_vent
-             
+            
             if act_inc: culoare = "ROSU"
             elif target_vent_nou > 0 or act_geam: culoare = "ALBASTRU"
             else: culoare = "GALBEN"
             
-            msg = "[MANUAL] Echipamente controlate de utilizator."
+            msg = "Echipamente controlate manual de utilizator."
             
+            # Memorie vibratii functioneaza si pe manual
             if self.vibratii > 3.0:
+                self.timp_expirare_vibratii = time.time() + 10.0 # Sta limitat 10s
+                
+            if time.time() < self.timp_expirare_vibratii:
                 alerta_vibratie = True 
-                if target_vent_nou > 0:       
-                    target_vent_nou = 0.5
-                    msg += " [ATENTIE: Turatie redusa din cauza vibratiilor!]"
+                if target_vent_nou > 0.4: # Limitam turatia dorita de om la 40%      
+                    target_vent_nou = 0.4
+                    msg += " [Limitare turatie manuala - Vibratii detectate!]"
 
-        # 3. LOGICA NORMALA (AUTO)
+        # 3. LOGICA NORMALA PROPORTIONALA (AUTO)
         else:
             if self.calitate_aer_slaba:
                 self.alerta = "ALERTA: Aer Viciat!"
@@ -207,26 +223,37 @@ class DigitalTwinHala:
                 msg = "Evacuare aer viciat."
             else:
                 self.alerta = "Niciuna"
+                
+                # Control Proportional al Turatiei (0 -> 4 grade = 0 -> 100%)
+                # Daca delta_temp e 2 grade, turatia va fi 0.5 (adica 50%)
+                turatie_proportionala = min(1.0, delta_temp / 4.0)
+
                 if self.temp > self.temperatura_tinta + TOLERANTA_TEMP:
                     act_geam = True  
-                    target_vent_nou = 1.0
-                    msg = "Racire activa."
+                    target_vent_nou = turatie_proportionala
+                    msg = "Racire activa progresiva."
                 elif self.temp < self.temperatura_tinta - TOLERANTA_TEMP:
                     act_geam = False 
                     act_inc = True
-                    target_vent_nou = 1.0
+                    target_vent_nou = turatie_proportionala
                     culoare = "ROSU"
-                    msg = "Incalzire activa."
+                    msg = "Incalzire activa progresiva."
                 else:
+                    # Suntem in zona moarta (+/- 1 grad). Lasam ventilatorul sa se duca treptat spre 0.
                     act_geam = False 
-                    msg = "Temperatura optima atinsa."
+                    target_vent_nou = turatie_proportionala
+                    msg = "Temperatura in zona optima."
 
+            # LOGICA VIBRATII (Memorie 10 secunde)
             if self.vibratii > 3.0:
+                self.timp_expirare_vibratii = time.time() + 10.0
+                
+            # Cat timp este in "cooldown", tinem ventilatorul redus
+            if time.time() < self.timp_expirare_vibratii:
                 alerta_vibratie = True 
-                msg += " [ALERTA VIBRATII]"
-                if target_vent_nou > 0:       
-                    target_vent_nou = 0.5
-                    msg += " -> Turatie redusa!"
+                msg += " [Cooldown Vibratii - Turatie limitata]"
+                if target_vent_nou > 0.4: # Max 40%       
+                    target_vent_nou = 0.4
 
             if time.time() < self.override_timp_expirare and self.override_servo is not None:
                 act_geam = self.override_servo
@@ -244,6 +271,7 @@ class DigitalTwinHala:
             else: self.incalzire_rezistente.off()
             self.incalzire_activa = act_inc
 
+        # Predam noul target worker-ului (care il va atinge fluid)
         self.target_ventilator = target_vent_nou
             
         if culoare == "ROSU":
@@ -268,11 +296,14 @@ class DigitalTwinHala:
         self.alerta_vibratii = alerta_vibratie
 
     def obtine_stare(self):
+        # Calculam media pe ultima secunda pentru afisare pe web/terminal
+        medie_ventilator = sum(self.istoric_vent) / max(1, len(self.istoric_vent))
+        
         return {
             "t": self.temp, "u": self.umiditate, "p": self.presiune,
             "v": self.vibratii, "aer": self.calitate_aer_slaba,
             "g": self.geam_deschis, "inc": self.incalzire_activa,
-            "vnt": int(self.putere_curenta_ventilator * 100),
+            "vnt": int(medie_ventilator * 100), # Trimitere medie fluida
             "msg": self.mesaj_predictie, "led": self.culoare_led,
             "alert_vib": self.alerta_vibratii,
             "auto": self.mod_auto,
@@ -327,5 +358,6 @@ if __name__ == "__main__":
     t_cmd = threading.Thread(target=asculta_terminal, args=(twin,), daemon=True)
     t_cmd.start()
     ruleaza_sistem(twin)
-   
+
+
 
