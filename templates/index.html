@@ -34,7 +34,6 @@
             width: 90%;
             max-width: 900px;
             border: 2px solid #30363d;
-            /* Aici se aplica tranzitia lina pentru GLOW */
             transition: box-shadow 0.6s ease, border-color 0.6s ease;
             position: relative;
         }
@@ -77,11 +76,23 @@
             border: 1px solid #30363d;
         }
 
-        /* STILIZARE ALERTE (Scenarii) */
-        .alerta-box { display: none; margin-top: 25px; padding: 15px; border-radius: 8px; font-weight: bold; text-align: center; text-transform: uppercase; letter-spacing: 1px; color: white;}
-        .alerta-vib { background-color: #9e6a03; display: block; border-left: 6px solid #ffd700; animation: pulse 2s infinite;}
-        .alerta-gaz { background-color: #8a1515; display: block; border-left: 6px solid #ff4d4d; }
-        .alerta-kill { background-color: #551a8b; display: block; border-left: 6px solid #9933ff; }
+        /* INDICATOR STARE PERMANENT (NOU) */
+        .banner-status {
+            margin-top: 25px;
+            padding: 15px;
+            border-radius: 8px;
+            font-weight: bold;
+            text-align: center;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: white;
+            transition: background-color 0.4s, border-color 0.4s;
+        }
+        
+        .bg-verde { background-color: #2ea043; border-left: 6px solid #238636; }
+        .bg-galben { background-color: #9e6a03; border-left: 6px solid #ffd700; animation: pulse 2s infinite; }
+        .bg-rosu { background-color: #8a1515; border-left: 6px solid #ff4d4d; }
+        .bg-mov { background-color: #551a8b; border-left: 6px solid #9933ff; }
 
         @keyframes pulse {
             0% { opacity: 1; }
@@ -105,7 +116,6 @@
 </head>
 <body>
 
-
     <h1>Panou Control Digital Twin</h1>
 
     <div id="hala-structura" class="glow-galben">
@@ -127,16 +137,15 @@
             <div id="gauge_vib" style="width: 200px; height: 200px;"></div>
         </div>
 
-        <div id="alerta-vib" class="alerta-box">ALERTA VIBRATII: Turatie ventilator redusa!</div>
-        <div id="alerta-gaz" class="alerta-box">ALERTA GAZ: Evacuare aer viciat!</div>
-        <div id="alerta-kill" class="alerta-box">KILL SWITCH ACTIVAT: Mod aer combinat. Totul este oprit!</div>
+        <div id="banner-sistem" class="banner-status bg-verde">
+            Sistemul se initializeaza...
+        </div>
 
         <div class="hardware-panel">
             <div style="margin-bottom: 10px; color: #c9d1d9;">[ DIAGNOSTIC HARDWARE ]</div>
             Ventilator: <span id="hard-vent">--</span>% <br>
             Servo Geam: <span id="hard-geam">--</span> <br>
-            Rezistente Incalzire: <span id="hard-inc">--</span> <br>
-            Comanda LED: <span id="hard-led">--</span>
+            Functie Sistem: <span id="hard-functie">--</span>
         </div>
 
     </div>
@@ -150,7 +159,6 @@
         let optionsTemp, optionsPres, optionsVib;
 
         function initCharts() {
-            // Am eliminat complet semnele speciale
             dataTemp = google.visualization.arrayToDataTable([['Label', 'Value'], ['Temp (C)', 0]]);
             dataPres = google.visualization.arrayToDataTable([['Label', 'Value'], ['Presiune', 0]]);
             dataVib = google.visualization.arrayToDataTable([['Label', 'Value'], ['Vibratii', 0]]);
@@ -183,35 +191,53 @@
                     document.getElementById('stare-text').innerText = data.msg;
                     document.getElementById('val-tinta').innerText = data.tinta;
 
-                    // Update Terminal Hardware
+                    // --- UPDATE TERMINAL HARDWARE ---
                     document.getElementById('hard-vent').innerText = data.vnt;
                     document.getElementById('hard-geam').innerText = data.g ? "DESCHIS (90 Grade)" : "INCHIS (180 Grade)";
-                    document.getElementById('hard-inc').innerText = data.inc ? "PORNITA" : "OPRITA";
-                    document.getElementById('hard-led').innerText = data.led;
+                    
+                    // Calculare "Functie Sistem" bazat pe semnalul LED
+                    let functie = "RACIRE";
+                    if (data.led === "AMBELE") {
+                        functie = "TEMPERATURA AMBIENTALA";
+                    } else if (data.led === "ROSU") {
+                        functie = "INCALZIRE";
+                    }
+                    document.getElementById('hard-functie').innerText = functie;
 
-                    // LOGICA PENTRU GLOW-UL EXTERIOR
+                    // --- LOGICA PENTRU GLOW-UL EXTERIOR AL HALEI ---
                     let hala = document.getElementById('hala-structura');
                     hala.className = ''; // Resetam clasele
-                    
                     if (data.t > data.tinta + data.toleranta) {
-                        // Prea cald -> Glow Albastru (Sistemul baga rece)
                         hala.classList.add('glow-albastru'); 
                     } else if (data.t < data.tinta - data.toleranta) {
-                        // Prea rece -> Glow Rosu (Sistemul baga caldura)
                         hala.classList.add('glow-rosu'); 
                     } else {
-                        // Optim -> Glow Galben (Asteptare/Normal)
                         hala.classList.add('glow-galben'); 
                     }
 
-                    // ALERTE SCENARII WHAT IF
-                    document.getElementById('alerta-vib').className = data.alert_vib ? 'alerta-box alerta-vib' : 'alerta-box';
-                    document.getElementById('alerta-gaz').className = data.aer ? 'alerta-box alerta-gaz' : 'alerta-box';
-                    document.getElementById('alerta-kill').className = (data.led === "AMBELE") ? 'alerta-box alerta-kill' : 'alerta-box';
+                    // --- LOGICA PENTRU BANNER-UL PERMANENT ---
+                    let banner = document.getElementById('banner-sistem');
+                    banner.className = 'banner-status '; // Resetam culorile bannerului
+                    
+                    // Prioritizam afisarea in functie de importanta (Kill Switch > Gaz > Vibratii > Optim)
+                    if (data.led === "AMBELE") {
+                        banner.innerText = "SISTEM OPRIT MANUAL (TEMPERATURA AMBIENTALA)";
+                        banner.classList.add('bg-mov');
+                    } else if (data.aer) {
+                        banner.innerText = "ALERTA GAZ: EVACUARE AER VICIAT!";
+                        banner.classList.add('bg-rosu');
+                    } else if (data.alert_vib) {
+                        banner.innerText = "SCADE TURATIA VENTILATORULUI (Vibratii detectate)";
+                        banner.classList.add('bg-galben');
+                    } else {
+                        banner.innerText = "FUNCTIONEAZA IN PARAMETRII OPTIMI";
+                        banner.classList.add('bg-verde');
+                    }
                 })
                 .catch(err => console.error("Asteptare server...", err));
         }
     </script>
 </body>
 </html>
+
 
