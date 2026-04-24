@@ -1,4 +1,5 @@
 import time
+import threading
 import board
 import adafruit_dht
 import adafruit_bmp280
@@ -9,7 +10,7 @@ from gpiozero import DigitalInputDevice, PWMOutputDevice, Servo, LED
 # SETARI DE CONFIGURARE MANUALA
 # ==========================================
 ACTIVARE_SENZOR_GAZ = 0      # 1 = Activ, 0 = Ignorat (bun daca il folosesti ca senzor de alcool)
-TEMPERATURA_TINTA = 22.0     # Temperatura la care vrei sa ajunga hala
+TEMPERATURA_TINTA = 26.0     # Temperatura la care vrei sa ajunga hala
 TOLERANTA_TEMP = 1.0         # +/- cate grade incep sa porneasca sistemele
 
 class DigitalTwinHala:
