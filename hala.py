@@ -11,7 +11,7 @@ from gpiozero import DigitalInputDevice, PWMOutputDevice, Servo, LED
 # SETARI DE CONFIGURARE
 # ==========================================
 ACTIVARE_SENZOR_GAZ = 0      # 1 = Activ, 0 = Ignorat
-TEMPERATURA_TINTA = 26.0     # Temperatura dorita in hala
+TEMPERATURA_TINTA = 20.0     # Temperatura dorita in hala
 TOLERANTA_TEMP = 1.0         # Pragul de activare (+/- grade)
 
 class DigitalTwinHala:
